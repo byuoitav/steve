@@ -40,10 +40,40 @@ func main() {
 
 	ds := dataService(ctx, dataServiceConfig)
 
-	configs, err := ds.EventConfigs(ctx, "ITB-1006")
-	if err != nil {
-		log.Fatal("error", zap.Error(err))
-	}
+	// decaying retry (seconds)
+	// should go 2 -> 4 -> 8 -> 16 -> 30 -> 30 -> 30
+	decayRetry := 0 * time.Second
+	for {
+		if decayRetry > 0 {
+			log.Info("Waiting to restart handling updates", zap.Duration("duration", decayRetry))
+			time.Sleep(decayRetry)
+		}
 
-	log.Info("configs", zap.Any("", configs))
+		log.Debug("Building messenger")
+
+		start := time.Now()
+		m := newMessenger("")
+
+		log.Info("Handling updates")
+
+		if err := handleUpdates(m, ds); err != nil {
+			log.Error("unable to handle updates", zap.Error(err))
+
+			switch {
+			case decayRetry == 0:
+				decayRetry = 2 * time.Second
+			case decayRetry >= 30*time.Second:
+				decayRetry = 30 * time.Second
+			default:
+				decayRetry *= 2
+			}
+		}
+
+		// restart the decaying retry
+		if time.Since(start) > decayRetry {
+			decayRetry = 2 * time.Second
+		}
+
+		m.Close()
+	}
 }

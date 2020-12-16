@@ -25,6 +25,7 @@ type StateUpdate struct {
 
 type StateUpdateStreamer interface {
 	Next(context.Context) (StateUpdate, error)
+	Close() error
 }
 
 type EventPublisher interface {
