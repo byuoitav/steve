@@ -10,8 +10,11 @@ type EventConfig struct {
 }
 
 type Event struct {
-	Key   string
-	Value string
+	Key      string
+	Value    string
+	RoomID   string
+	DeviceID string
+	Tags     []string
 }
 
 type DataService interface {
