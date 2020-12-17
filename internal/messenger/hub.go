@@ -9,30 +9,33 @@ import (
 	"github.com/byuoitav/central-event-system/messenger"
 	"github.com/byuoitav/common/v2/events"
 	"github.com/byuoitav/steve"
+	"go.uber.org/zap"
 )
 
 type Messenger struct {
 	GeneratingSystem string
 	MatchKey         string
+	Log              *zap.Logger
 
 	m    *messenger.Messenger
 	done chan struct{}
 }
 
-func New(hubURL string) (Messenger, error) {
+func New(hubURL string) (*Messenger, error) {
 	m, err := messenger.BuildMessenger(hubURL, base.Messenger, 512)
 	if err != nil {
-		return Messenger{}, err
+		return nil, err
 	}
 
 	m.SubscribeToRooms("*")
 
-	return Messenger{
+	return &Messenger{
 		m: m,
 	}, nil
 }
 
 func (m *Messenger) Close() error {
+	m.m.UnsubscribeFromRooms("*")
 	m.m.Kill()
 	return nil
 }
@@ -47,6 +50,8 @@ func (m *Messenger) Publish(ctx context.Context, event steve.Event) error {
 		AffectedRoom:     events.GenerateBasicRoomInfo(event.RoomID),
 		TargetDevice:     events.GenerateBasicDeviceInfo(event.DeviceID),
 	}
+
+	m.Log.Debug("Publishing", zap.Any("event", e))
 
 	m.m.SendEvent(e)
 	return nil
@@ -89,6 +94,8 @@ func (m *Messenger) Next(ctx context.Context) (steve.StateUpdate, error) {
 			if invalid {
 				continue
 			}
+
+			m.Log.Debug("Received state update", zap.String("room", event.AffectedRoom.RoomID), zap.Strings("states", states))
 
 			update <- steve.StateUpdate{
 				Room:   event.AffectedRoom.RoomID,

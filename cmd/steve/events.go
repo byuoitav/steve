@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/byuoitav/steve"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
-func handleUpdates(m messenger, ds steve.DataService) error {
+func handleUpdates(m messenger, ds steve.DataService, log *zap.Logger) error {
 	updates := make(chan steve.StateUpdate)
 	g, ctx := errgroup.WithContext(context.Background())
 
@@ -32,7 +33,7 @@ func handleUpdates(m messenger, ds steve.DataService) error {
 			select {
 			case update := <-updates:
 				go func() {
-					if err := handleUpdate(m, ds, update); err != nil {
+					if err := handleUpdate(m, ds, log, update); err != nil {
 						select {
 						case errors <- err:
 						default:
@@ -50,7 +51,7 @@ func handleUpdates(m messenger, ds steve.DataService) error {
 	return g.Wait()
 }
 
-func handleUpdate(m messenger, ds steve.DataService, update steve.StateUpdate) error {
+func handleUpdate(m messenger, ds steve.DataService, log *zap.Logger, update steve.StateUpdate) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -64,6 +65,8 @@ func handleUpdate(m messenger, ds steve.DataService, update steve.StateUpdate) e
 		return fmt.Errorf("unable to get event configs: %w", err)
 	}
 
+	sent := 0
+
 	for _, config := range configs {
 		if !statesMatch(states, config.MatchStates) {
 			break
@@ -73,9 +76,12 @@ func handleUpdate(m messenger, ds steve.DataService, update steve.StateUpdate) e
 			if err := m.Publish(ctx, event); err != nil {
 				return fmt.Errorf("unable to publish event: %w", err)
 			}
+
+			sent++
 		}
 	}
 
+	log.Info("Finished publishing events from update", zap.Int("sent", sent))
 	return nil
 }
 

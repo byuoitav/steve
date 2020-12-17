@@ -30,10 +30,6 @@ func dataService(ctx context.Context, config dataServiceConfig) steve.DataServic
 	return ds
 }
 
-func newMessenger(hub string) messenger {
-	return nil
-}
-
 func logger(logLevel string) (zap.Config, *zap.Logger) {
 	var level zapcore.Level
 	if err := level.Set(logLevel); err != nil {

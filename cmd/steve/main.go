@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	mess "github.com/byuoitav/steve/internal/messenger"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
 )
@@ -19,6 +20,7 @@ func main() {
 		port      int
 		logLevel  string
 		cachePath string
+		hubURL    string
 
 		dataServiceConfig dataServiceConfig
 	)
@@ -29,6 +31,7 @@ func main() {
 	pflag.StringVar(&dataServiceConfig.Username, "db-username", "", "database username")
 	pflag.StringVar(&dataServiceConfig.Password, "db-password", "", "database password")
 	pflag.StringVar(&cachePath, "cache-path", "", "path to file for config caching")
+	pflag.StringVar(&hubURL, "hub-url", "", "url of the event hub")
 	pflag.Parse()
 
 	// ctx for setup
@@ -42,36 +45,45 @@ func main() {
 
 	// decaying retry (seconds)
 	// should go 2 -> 4 -> 8 -> 16 -> 30 -> 30 -> 30
-	decayRetry := 0 * time.Second
-	for {
-		if decayRetry > 0 {
-			log.Info("Waiting to restart handling updates", zap.Duration("duration", decayRetry))
-			time.Sleep(decayRetry)
+	var decayRetry time.Duration
+	var start time.Time
+	decay := func() {
+		switch {
+		case time.Since(start) > decayRetry:
+			decayRetry = 2 * time.Second
+		case decayRetry == 0:
+			decayRetry = 2 * time.Second
+		case decayRetry >= 32*time.Second:
+			decayRetry = 32 * time.Second
+		default:
+			decayRetry *= 2
 		}
 
+		log.Info("Waiting to restart handling updates", zap.Duration("duration", decayRetry))
+		time.Sleep(decayRetry)
+	}
+
+	for {
+		start = time.Now()
 		log.Debug("Building messenger")
 
-		start := time.Now()
-		m := newMessenger("")
-
-		log.Info("Handling updates")
-
-		if err := handleUpdates(m, ds); err != nil {
-			log.Error("unable to handle updates", zap.Error(err))
-
-			switch {
-			case decayRetry == 0:
-				decayRetry = 2 * time.Second
-			case decayRetry >= 30*time.Second:
-				decayRetry = 30 * time.Second
-			default:
-				decayRetry *= 2
-			}
+		m, err := mess.New(hubURL)
+		if err != nil {
+			log.Error("unable to build messenger", zap.Error(err))
+			decay()
+			continue
 		}
 
-		// restart the decaying retry
-		if time.Since(start) > decayRetry {
-			decayRetry = 2 * time.Second
+		m.Log = log
+
+		// TODO set generating system, match key
+		log.Info("Handling updates")
+
+		if err := handleUpdates(m, ds, log); err != nil {
+			log.Error("unable to handle updates", zap.Error(err))
+			m.Close()
+			decay()
+			continue
 		}
 
 		m.Close()
