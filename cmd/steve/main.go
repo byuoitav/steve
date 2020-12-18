@@ -75,6 +75,7 @@ func main() {
 		}
 
 		m.Log = log
+		m.MatchKey = "states"
 
 		// TODO set generating system, match key
 		log.Info("Handling updates")

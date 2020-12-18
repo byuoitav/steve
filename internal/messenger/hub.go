@@ -3,7 +3,6 @@ package messenger
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/byuoitav/central-event-system/hub/base"
 	"github.com/byuoitav/central-event-system/messenger"
@@ -13,9 +12,8 @@ import (
 )
 
 type Messenger struct {
-	GeneratingSystem string
-	MatchKey         string
-	Log              *zap.Logger
+	MatchKey string
+	Log      *zap.Logger
 
 	m    *messenger.Messenger
 	done chan struct{}
@@ -42,8 +40,8 @@ func (m *Messenger) Close() error {
 
 func (m *Messenger) Publish(ctx context.Context, event steve.Event) error {
 	e := events.Event{
-		GeneratingSystem: m.GeneratingSystem,
-		Timestamp:        time.Now(),
+		Timestamp:        event.Timestamp,
+		GeneratingSystem: event.GeneratingSystem,
 		EventTags:        event.Tags,
 		Key:              event.Key,
 		Value:            event.Value,
@@ -98,8 +96,10 @@ func (m *Messenger) Next(ctx context.Context) (steve.StateUpdate, error) {
 			m.Log.Debug("Received state update", zap.String("room", event.AffectedRoom.RoomID), zap.Strings("states", states))
 
 			update <- steve.StateUpdate{
-				Room:   event.AffectedRoom.RoomID,
-				States: states,
+				GeneratingSystem: event.GeneratingSystem,
+				Timestamp:        event.Timestamp,
+				Room:             event.AffectedRoom.RoomID,
+				States:           states,
 			}
 			return
 		}

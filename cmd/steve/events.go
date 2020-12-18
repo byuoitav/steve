@@ -73,6 +73,13 @@ func handleUpdate(m messenger, ds steve.DataService, log *zap.Logger, update ste
 		}
 
 		for _, event := range config.Events {
+			event.Timestamp = update.Timestamp
+			event.GeneratingSystem = update.GeneratingSystem
+
+			if event.RoomID == "" {
+				event.RoomID = update.Room
+			}
+
 			if err := m.Publish(ctx, event); err != nil {
 				return fmt.Errorf("unable to publish event: %w", err)
 			}
